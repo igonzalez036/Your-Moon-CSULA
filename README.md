@@ -101,7 +101,7 @@ docker-compose -f docker-compose-reverse-proxy.yml build --no-cache
 * [SERVER](./server/README.md)
 
 
-## DATABASE
+### DATABASE
 
  - currently, you can only run this locally since there's no server that we can use (i think in the future we can use the schools virtual machine)
  - download a program called XAMPP
