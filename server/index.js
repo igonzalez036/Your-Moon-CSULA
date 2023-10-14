@@ -25,7 +25,10 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+	credentials: true,
+	origin: config.cors_origin_whitelist
+}));
 app.use(cookieParser());
 
 
@@ -42,60 +45,60 @@ const isImg = (req, file, cb) => {
 
 // save to file system
 // ==================================================
-// const storeImg = multer.diskStorage({
-// 	destination: (req, file, cb) => {
-// 		// cb = callback
-// 		cb(null, "uploadedImages");		// uploads to 'uploadedImages' folder
-// 	},
-// 	filename: (req, file, cb) => {
-// 		cb(null, `image-${Date.now()}.${file.originalname}`);
-// 	},
-// });
-// const upload = multer({
-// 	storage: storeImg,
-// 	fileFilter: isImg,
-// 	limits: { fileSize: config.max_upload_size },
-// });
+const storeImg = multer.diskStorage({
+	destination: (req, file, cb) => {
+		// cb = callback
+		cb(null, "uploadedImages");		// uploads to 'uploadedImages' folder
+	},
+	filename: (req, file, cb) => {
+		cb(null, `image-${Date.now()}.${file.originalname}`);
+	},
+});
+const upload = multer({
+	storage: storeImg,
+	fileFilter: isImg,
+	limits: { fileSize: config.max_upload_size },
+});
 // ==================================================
 
 
 // save to aws s3
 // ==================================================
-// Connection to S3 database with full S3 connection
-let aws_config = (({ bucket_name, ...others }) => others)(config.aws)
-AWS.config.update(aws_config);
+// // Connection to S3 database with full S3 connection
+// let aws_config = (({ bucket_name, ...others }) => others)(config.aws)
+// AWS.config.update(aws_config);
 
-// Create a connection to yourmoon bucket
-const s3 = new AWS.S3();
-s3.listBuckets((err, data) => {
-	if (err) {
-		logger.error('AWS connection error:', err);
-	} else {
-		logger.info('AWS connection successful.');
-		logger.info(`\n${JSON.stringify(data,null,2)}`);
-	}
-});
+// // Create a connection to yourmoon bucket
+// const s3 = new AWS.S3();
+// s3.listBuckets((err, data) => {
+// 	if (err) {
+// 		logger.error('AWS connection error:', err);
+// 	} else {
+// 		logger.info('AWS connection successful.');
+// 		logger.info(`\n${JSON.stringify(data,null,2)}`);
+// 	}
+// });
 
-// setup multer for upload to s3
-const upload = multer({
-	storage: multerS3({
-		s3: s3,
-		acl: 'public-read',
-		bucket: config.aws.bucket_name,
-		key: function (req, file, cb) {
-			logger.warn("Upload Query: ", req.query);
-			logger.warn("File Information:\n", file);
-			const key = `image-${new Date().toISOString()}.${file.originalname}`;
-			if (key) {
-			  cb(null, key);
-			} else {
-			  cb(new Error("Error generating S3 key"));
-			}
-		  },
-		fileFilter: isImg,
-		limits: { fileSize: config.max_upload_size },
-	})
-});
+// // setup multer for upload to s3
+// const upload = multer({
+// 	storage: multerS3({
+// 		s3: s3,
+// 		acl: 'public-read',
+// 		bucket: config.aws.bucket_name,
+// 		key: function (req, file, cb) {
+// 			logger.warn("Upload Query: ", req.query);
+// 			logger.warn("File Information:\n", file);
+// 			const key = `image-${new Date().toISOString()}.${file.originalname}`;
+// 			if (key) {
+// 			  cb(null, key);
+// 			} else {
+// 			  cb(new Error("Error generating S3 key"));
+// 			}
+// 		  },
+// 		fileFilter: isImg,
+// 		limits: { fileSize: config.max_upload_size },
+// 	})
+// });
 // ==================================================
 
 
@@ -128,8 +131,11 @@ function uploadHandler(next) { // outer function takes in "next" request handler
 app.post("/api/picUpload", uploadHandler((req, res) => { // pass upload & db handler as "next" function
 	try {
 		logger.debug(`req.cookies: ${JSON.stringify(req.cookies,null,2)}`);
-		let jwt_token = req.cookies.token;
+		logger.debug(`req.headers: ${JSON.stringify(req.headers,null,2)}`);
+		// backend will take jwt from either cookies.token or headers.authorization
+		let jwt_token = Object.keys(req.cookies).length <= 0 ? req.headers.authorization : req.cookies.token;
 		if (!jwt_token || jwt_token.length <= 0) {
+			logger.warn("UNAUTHORIZED ACCESS!");
 			res.status(401).json({
 				status: "UNAUTHORIZED ACCESS!",
 				message: "Please login to access this endpoint.",
@@ -209,8 +215,11 @@ app.post("/api/picMetadata", (req, res) => {
 		logger.debug(JSON.stringify(req.body));
 		
 		logger.debug(`req.cookies: ${JSON.stringify(req.cookies,null,2)}`);
-		let jwt_token = req.cookies.token;
+		logger.debug(`req.headers: ${JSON.stringify(req.headers,null,2)}`);
+		// backend will take jwt from either cookies.token or headers.authorization
+		let jwt_token = Object.keys(req.cookies).length <= 0 ? req.headers.authorization : req.cookies.token;
 		if (!jwt_token || jwt_token.length <= 0) {
+			logger.warn("UNAUTHORIZED ACCESS!");
 			res.status(401).json({
 				status: "UNAUTHORIZED ACCESS!",
 				message: "Please login to access this endpoint.",
