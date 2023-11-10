@@ -7,15 +7,17 @@ if (process.env.NODE_ENV === "production") {
 }
 const express = require("express");
 const app = express();
-const AWS = require("aws-sdk");
 const bodyParser = require("body-parser");
-const multer = require("multer");
-const multerS3 = require("multer-s3");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const DBManager = require('./DBManager.js');
 var logger = require('./logger.js')(config.log_file, config.log_level);
 var db = new DBManager(config.db, config.aes_key, config.jwt_secret, logger);
+const upload = require('./multerSetup.js')(process.env.STORAGE_METHOD, config, logger);
+const CryptoJS = require("crypto-js");
+const passport = require("./passport.js")(config.oauth, db, logger);
+const session = require('express-session');
+const authRoutes = require("./routes/auth");
 
 
 // parse application/x-www-form-urlencoded
@@ -25,81 +27,26 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 app.use(express.json());
+
+app.use(session({
+	// express-session needs a secret for signing sessions with HMAC
+	// we use a session_key from config file to ensure its security
+	secret: CryptoJS.enc.Base64.parse(config.session_key).toString(CryptoJS.enc.Hex),
+	resave: false,
+	saveUninitialized: false,
+	cookie: { secure: false }
+}));
+
+
+app.use(passport.initialize());
+app.use(passport.session());
 app.use(cors({
 	credentials: true,
 	origin: config.cors_origin_whitelist
 }));
 app.use(cookieParser());
+app.use("/api/auth", authRoutes)
 
-
-// file filter to only allow image file types ()
-const isImg = (req, file, cb) => {
-	if (file.mimetype.startsWith("image")) {
-		cb(null, true);
-	} else {
-		logger.warn("NOT AN IMAGE!!!");
-		cb(null, logger.warn("ONLY image files are acceptable!"));
-	}
-};
-
-
-// save to file system
-// ==================================================
-const storeImg = multer.diskStorage({
-	destination: (req, file, cb) => {
-		// cb = callback
-		cb(null, "uploadedImages");		// uploads to 'uploadedImages' folder
-	},
-	filename: (req, file, cb) => {
-		cb(null, `image-${Date.now()}.${file.originalname}`);
-	},
-});
-const upload = multer({
-	storage: storeImg,
-	fileFilter: isImg,
-	limits: { fileSize: config.max_upload_size },
-});
-// ==================================================
-
-
-// save to aws s3
-// ==================================================
-// // Connection to S3 database with full S3 connection
-// let aws_config = (({ bucket_name, ...others }) => others)(config.aws)
-// AWS.config.update(aws_config);
-
-// // Create a connection to yourmoon bucket
-// const s3 = new AWS.S3();
-// s3.listBuckets((err, data) => {
-// 	if (err) {
-// 		logger.error('AWS connection error:', err);
-// 	} else {
-// 		logger.info('AWS connection successful.');
-// 		logger.info(`\n${JSON.stringify(data,null,2)}`);
-// 	}
-// });
-
-// // setup multer for upload to s3
-// const upload = multer({
-// 	storage: multerS3({
-// 		s3: s3,
-// 		acl: 'public-read',
-// 		bucket: config.aws.bucket_name,
-// 		key: function (req, file, cb) {
-// 			logger.warn("Upload Query: ", req.query);
-// 			logger.warn("File Information:\n", file);
-// 			const key = `image-${new Date().toISOString()}.${file.originalname}`;
-// 			if (key) {
-// 			  cb(null, key);
-// 			} else {
-// 			  cb(new Error("Error generating S3 key"));
-// 			}
-// 		  },
-// 		fileFilter: isImg,
-// 		limits: { fileSize: config.max_upload_size },
-// 	})
-// });
-// ==================================================
 
 
 function uploadHandler(next) { // outer function takes in "next" request handler
@@ -284,7 +231,39 @@ app.post("/api/picMetadata", (req, res) => {
 	}
 });
 
-//! This is a demo endpoint, we can do user authentication in auth.js
+app.get("/api/emailAESKey", (req, res) => {
+	try {
+		logger.info("In emailAESKey");
+		logger.debug(`req.body:`);
+		logger.debug(JSON.stringify(req.body));
+		
+		db.registerUserRegistrationJob(300, (error, result) => {
+            logger.debug(`result: ${JSON.stringify(result,null,2)}`);
+            logger.debug(`error: ${JSON.stringify(error,null,2)}`);
+			if (error) {
+				logger.error(`error:\n${error}`);
+				res.status(400).json({
+					status: "KEY GENERATION FAILED ! ❌",
+					message: error.toString(),
+				});
+			}
+			else {
+				res.status(200).json({
+					status: "NEW AES KEY",
+					...result
+				});
+			}
+		})
+	}
+	catch (error) {
+		logger.error(`Exception:\n${error.stack}`);
+		res.status(500).json({
+			status: "KEY GENERATION FAILED ! ❌",
+			message: "Internal Server Error",
+		});
+	}
+})
+
 app.post("/api/authUser", (req, res) => {
 	try {
 		logger.info("In authUser");
@@ -292,36 +271,48 @@ app.post("/api/authUser", (req, res) => {
 		logger.debug(JSON.stringify(req.body));
 		
 		// TODO: retrieve email from OAuth 2.0
-		const { user_email } = req.query;
+		const { user_email, uuid } = req.body;
 		logger.debug(`user_email: ${user_email}`);
+		logger.debug(`uuid: ${uuid}`);
 		
-		db.registerUser(user_email, (error, result) => {
+		db.finishUserRegistrationJob(uuid, user_email, (error, result) => {
             logger.debug(`result: ${JSON.stringify(result,null,2)}`);
             logger.debug(`error: ${JSON.stringify(error,null,2)}`);
 			if (error) {
-				logger.error(`error:\n${error}`);
-				let message = null;
-				if (error.toString().includes("duplicate")) {
-					message = "DUPLICATE EMAIL";
-				} else {
-					message = "FAILED TO REGISTER USER";
-				}
 				res.status(400).json({
-					status: "REGISTER FAILED ! ❌",
-					message: message,
+					status: "REGISTER OR LOGIN FAILED ! ❌",
+					message: "FAILED TO DECRYPT EMAIL",
 				});
-				logger.error(message);
+				return;
 			}
 			else {
-				// response with jwt
-				res.status(200).json(result);
+				db.registerOrLoginUser(result.user_email, (error, result) => {
+					logger.debug(`result: ${JSON.stringify(result,null,2)}`);
+					logger.debug(`error: ${JSON.stringify(error,null,2)}`);
+					if (error) {
+						logger.error(`error:\n${error}`);
+						let message = null;
+						if (error) {
+							message = "FAILED TO REGISTER OR LOGIN USER";
+						}
+						res.status(400).json({
+							status: "REGISTER OR LOGIN FAILED ! ❌",
+							message: message,
+						});
+						logger.error(message);
+					}
+					else {
+						// response with jwt
+						res.status(200).json(result);
+					}
+				});
 			}
 		});
 	}
 	catch (error) {
 		logger.error(`Exception:\n${error.stack}`);
 		res.status(500).json({
-			status: "UPLOAD FAILED ! ❌",
+			status: "SERVER FAILED ! ❌",
 			message: "Internal Server Error",
 		});
 	}
@@ -332,11 +323,12 @@ app.get("/api/verifyUser", (req, res) => {
 	try {
 		logger.info("In verifyUser");
 		logger.debug(`req.body:`);
-		logger.debug(JSON.stringify(req.body));
+		//logger.debug(JSON.stringify(req.body));
 		
 		// user_jwt is inside http header: authorization
-		const user_jwt = req.headers.authorization;
-		logger.debug(`user_jwt: ${user_jwt}`);
+		let user_jwt = req.cookies.token;
+		logger.debug("user_jwt")
+		logger.info(`user_jwt: ${user_jwt}`);
 		
 		db.verifyUserJWT(user_jwt, (error, result) => {
             logger.debug(`result: ${JSON.stringify(result,null,2)}`);
