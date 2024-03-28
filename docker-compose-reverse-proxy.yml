@@ -12,11 +12,22 @@ services:
       - "./data/server/uploadedImages:/src/uploadedImages"
       - "./data/server:/src/data"
   
+  your-moon-redis:
+    build:
+      context: redis/
+      dockerfile: Dockerfile
+      args:
+        REDIS_CONFIG: ${REDIS_CONFIG}
+    image: your-moon-redis
+    container_name: your-moon-redis
+    restart: unless-stopped
+  
   your-moon-client:
     build:
       context: client/
       args:
         BACKEND_URL: ""
+        CONTACT_EMAIL: ${CONTACT_EMAIL}
     image: your-moon-client
     container_name: your-moon-client
     restart: unless-stopped

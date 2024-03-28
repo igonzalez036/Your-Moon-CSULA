@@ -37,11 +37,14 @@ mkdir -p data/server/uploadedImages
 ```
 
 2. follow [frontend client configuration document](./client/README.md#configure) to create all config file under `data/client/config`
+   * **When using docker-compose, [configuring .env file](#configure-for-docker-compose-recommend) will automatically configure the client for you. You don't need to create a separate config file**
+   * **When using docker along, you still need this step**
 
 3. follow [backend client configuration document](./server/README.md#configure) to create all config file under `data/backend/config`
    * **Note that you should set the path of `log_file` to `/src/data/your-moon-server.log`, so server's log file can be put under `data/server`**
    * **Also Note that docker container will only accept `production.config.json` file, so be sure you create the right one**
    * You can use [./server/config/production.config.json.docker](./server/config/production.config.json.docker) as your starting point
+   * **Be carefull about "frontend_url" field in the config file, you cannot use this field if deploying with reverse proxy**
 
 
 ## Deploy with Docker Compose (recommend)
@@ -65,6 +68,14 @@ Assuming you are in the root directory of this repository
    2. and then add a new line in it: `APP_PORT=8080`
    3. this file will tell docker-compose which port to expose for the entire app
    4. you can use file `.env.template` as your starting point
+
+* to run a Redis server with username and password, you can set optional environment variable in your `.env` file. Add following line to your `.env` file:
+
+```
+REDIS_CONFIG="/path/to/optional/redis.conf"
+```
+
+> Note that, we use this argument as the build argument for `redis/Dockerfile`, so relative path will be relative to `redis/` folder, you should use absolute path. [Checkout redis/README.md](./redis/README.md) for more detail
 
 
 ### Deploy Entire App with Docker Compose
@@ -103,13 +114,8 @@ docker-compose -f docker-compose-reverse-proxy.yml build --no-cache
 
 ### DATABASE
 
- - currently, you can only run this locally since there's no server that we can use (i think in the future we can use the schools virtual machine)
- - download a program called XAMPP
- - this is a video tutorial to set up XAMPP and configure it to create a database
-    - https://www.youtube.com/watch?v=pVVACLH0la0&ab_channel=TroubleChute
- - you would also have to create a database called 'LunarImages'
- - Notes:
-    - table is called 'YourMoonDB'
+[Refer to this document](./db/README.md)
 
-* Also considering using Docker for database
-  * [checkout this documentation](https://dev.mysql.com/doc/mysql-installation-excerpt/8.0/en/docker-mysql-getting-started.html)
+## About Docker Network
+
+[Refer to this document](./DockerNetwork.md)

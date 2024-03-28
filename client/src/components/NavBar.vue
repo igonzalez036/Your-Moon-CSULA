@@ -1,61 +1,118 @@
-<!-- eslint-disable prettier/prettier -->
+<script setup>
+import { ref } from "vue";
+
+import { onBeforeMount } from "vue";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "../stores/authStore.js";
+import Cookies from "js-cookie";
+
+const router = useRouter();
+const authenticated = ref(false);
+const auth = useAuthStore();
+
+onBeforeMount(() => {
+  authenticated.value = Cookies.get("token") ? true : false;
+});
+
+const isBurgerActive = ref(false);
+
+const logout = () => {
+  auth.signOut();
+  window.location.reload();
+  router.push({ path: "/" });
+};
+
+const toggleBurger = () => {
+  isBurgerActive.value = !isBurgerActive.value;
+};
+</script>
+
 <template>
+  <nav class="navbar navbar-expand-lg">
+    <a href="/" class="navbar-brand">
+      <img
+        src="../assets/moon_phase.gif"
+        alt="moon gif"
+        style="max-height: 70px; margin-right: 8px"
+      />
+      <span class="brand-your" style="color: #ffb703">Your</span>
+      <span class="brand-moon" style="color: #fefae0">Moon</span>
+    </a>
 
-  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-
-    <!-- <img src="../views/moonFace.gif" alt="moon face" style="width:35px; height:35px;"> -->
-    <img href="#" src="../assets/moon.gif" alt="moon" style="width:50px; height:50px">
-    <a class="navbar-brand" href="/"><span>Your</span>Moon</a>
-
-    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
+    <button
+      class="navbar-toggler"
+      @click="toggleBurger"
+      :class="{ 'is-active': isBurgerActive }"
+    >
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
     </button>
-    
-    <div class="collapse navbar-collapse" id="navbarSupportedContent">
-      <ul class="navbar-nav">
-        
+    <div
+      :class="{ show: isBurgerActive }"
+      class="collapse navbar-collapse justify-content-end"
+      id="navbar-collapse"
+    >
+      <ul class="nav navbar-nav">
         <li class="nav-item">
-          <a class="nav-link"><RouterLink to="/upload">Upload Images</RouterLink></a>
+          <a class="nav-link" href="/">Home</a>
         </li>
-        
-        <!-- <li class="nav-item">
-          <a class="nav-link"><RouterLink to="/about">About</RouterLink></a>
-        </li> -->
+        <li v-if="authenticated" class="nav-item">
+          <a class="nav-link" href="/upload">Upload</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/contact">Contact</a>
+        </li>
+        <li v-if="authenticated" class="nav-item">
+          <a class="nav-link" @click="logout">Logout</a>
+        </li>
       </ul>
     </div>
   </nav>
-  
 </template>
 
-<!-- eslint-disable prettier/prettier -->
 <style scoped>
-    span{
-      color: hsla(160, 100%, 37%, 1);
-    }
+.navbar {
+  background-color: #001219;
+  padding: 0.5rem 1rem;
+  font-weight: bold;
+  color: #ffffff;
+}
 
-    nav{
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 5px;
-    padding-left: 3%; 
-    padding-right: 3%;
-    background-color: transparent;
-    z-index: 1;
-    font-size: 14px;
-    }
-
-    nav ul li a {
-        color: white;
-        text-decoration: none;
-        font-weight: bold;
-        transition: .3s;
-    }
-
-    nav ul li a:hover {
-    text-decoration: none;
-    color: hsla(160, 100%, 37%, 1);
-    }
+.nav-item {
+  cursor: pointer;
+}
+.navbar-brand {
+  font-size: 1.5rem;
+  font-weight: bold;
+  padding-left: 25px;
+  font-family: "Quicksand", monospace;
+  justify-content: flex;
+  align-items: center;
+  display: flex;
+}
+.brand-your {
+  font-weight: bold;
+}
+.brand-moon {
+  font-weight: bold;
+}
+.navbar-toggler {
+  border: none;
+  background-color: transparent;
+  color: #ffb703;
+}
+.nav-link {
+  color: #ffb703;
+  font-size: 1rem;
+  font-weight: bold;
+  font-family: "Quicksand", monospace;
+}
+.icon-bar {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background-color: #ffb703;
+  margin: 4px 0;
+}
 </style>
-
-
